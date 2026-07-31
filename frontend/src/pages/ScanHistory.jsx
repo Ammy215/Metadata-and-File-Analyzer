@@ -4,6 +4,7 @@ import { Clock, FileText, RefreshCw } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../lib/getErrorMessage';
+import FileDetailModal from '../components/FileDetailModal';
 
 const VERDICT_STYLES = {
   SAFE: 'text-green-400 bg-green-500/10 border-green-500/30',
@@ -16,6 +17,7 @@ export default function ScanHistory() {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [selectedFileId, setSelectedFileId] = useState(null);
 
   const fetchHistory = async () => {
     try {
@@ -76,29 +78,37 @@ export default function ScanHistory() {
           ) : (
             <div className="divide-y divide-white/10">
               {items.map((item) => (
-                <div key={item.file_id} className="py-4 flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <FileText className="w-5 h-5 text-slate-400" />
-                    <div>
-                      <p className="text-white font-medium">{item.original_name}</p>
+                <button
+                  key={item.file_id}
+                  onClick={() => setSelectedFileId(item.file_id)}
+                  className="w-full py-4 flex items-center justify-between text-left hover:bg-white/5 rounded-lg px-2 -mx-2 transition-colors"
+                >
+                  <div className="flex items-center gap-4 min-w-0">
+                    <FileText className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-white font-medium truncate">{item.original_name}</p>
                       <p className="text-slate-400 text-sm flex items-center gap-1">
                         <Clock className="w-3 h-3" />
                         {new Date(item.upload_time).toLocaleString()}
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 flex-shrink-0">
                     <span className="text-white font-medium">{item.risk_score}/100</span>
                     <span className={`px-3 py-1 rounded-full border text-sm font-semibold ${VERDICT_STYLES[item.verdict] || 'text-slate-400 bg-slate-500/10 border-slate-500/30'}`}>
                       {item.verdict || 'PENDING'}
                     </span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
         </motion.div>
       </div>
+
+      {selectedFileId && (
+        <FileDetailModal fileId={selectedFileId} onClose={() => setSelectedFileId(null)} />
+      )}
     </div>
   );
 }

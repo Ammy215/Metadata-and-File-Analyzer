@@ -4,6 +4,7 @@ import { FileText, Search, Trash2, Eye, Filter } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
 import TopBar from '../components/layout/TopBar';
+import FileDetailModal from '../components/FileDetailModal';
 import { getErrorMessage } from '../lib/getErrorMessage';
 
 export default function AdminFiles() {
@@ -293,91 +294,10 @@ export default function AdminFiles() {
             )}
           </motion.div>
 
-          {/* File Detail Modal */}
+          {/* File Detail Modal - real analysis findings, not just the
+              summary fields already visible in the table row */}
           {selectedFile && (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-slate-800 rounded-xl border border-white/20 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
-              >
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-6">
-                    <div>
-                      <h2 className="text-2xl font-bold text-white mb-2">File Details</h2>
-                      <p className="text-slate-400">Complete information about this file</p>
-                    </div>
-                    <button
-                      onClick={() => setSelectedFile(null)}
-                      className="text-slate-400 hover:text-white"
-                    >
-                      ✕
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="p-4 bg-white/5 rounded-lg">
-                      <p className="text-slate-400 text-sm mb-1">File Name</p>
-                      <p className="text-white font-medium">{selectedFile.original_name}</p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-4 bg-white/5 rounded-lg">
-                        <p className="text-slate-400 text-sm mb-1">File Type</p>
-                        <p className="text-white font-medium">{selectedFile.mime_type}</p>
-                      </div>
-                      <div className="p-4 bg-white/5 rounded-lg">
-                        <p className="text-slate-400 text-sm mb-1">Size</p>
-                        <p className="text-white font-medium">{formatBytes(selectedFile.size_bytes)}</p>
-                      </div>
-                      <div className="p-4 bg-white/5 rounded-lg">
-                        <p className="text-slate-400 text-sm mb-1">Verdict</p>
-                        <p className={`font-medium ${
-                          selectedFile.verdict === 'SAFE' ? 'text-green-400' :
-                          selectedFile.verdict === 'SUSPICIOUS' ? 'text-yellow-400' :
-                          selectedFile.verdict === 'HIGH RISK' ? 'text-orange-400' :
-                          'text-red-400'
-                        }`}>
-                          {selectedFile.verdict}
-                        </p>
-                      </div>
-                      <div className="p-4 bg-white/5 rounded-lg">
-                        <p className="text-slate-400 text-sm mb-1">Risk Score</p>
-                        <p className="text-white font-medium">{selectedFile.risk_score}/100</p>
-                      </div>
-                      <div className="p-4 bg-white/5 rounded-lg col-span-2">
-                        <p className="text-slate-400 text-sm mb-1">Upload Time</p>
-                        <p className="text-white font-medium">{formatDate(selectedFile.upload_time)}</p>
-                      </div>
-                      <div className="p-4 bg-white/5 rounded-lg col-span-2">
-                        <p className="text-slate-400 text-sm mb-1">File ID</p>
-                        <p className="text-white font-mono text-xs">{selectedFile.id}</p>
-                      </div>
-                      <div className="p-4 bg-white/5 rounded-lg col-span-2">
-                        <p className="text-slate-400 text-sm mb-1">User ID</p>
-                        <p className="text-white font-mono text-xs">{selectedFile.user_id}</p>
-                      </div>
-                    </div>
-
-                    <div className={`p-4 rounded-lg border ${
-                      selectedFile.verdict === 'SAFE' ? 'bg-green-500/10 border-green-500/30' :
-                      selectedFile.verdict === 'SUSPICIOUS' ? 'bg-yellow-500/10 border-yellow-500/30' :
-                      selectedFile.verdict === 'HIGH RISK' ? 'bg-orange-500/10 border-orange-500/30' :
-                      'bg-red-500/10 border-red-500/30'
-                    }`}>
-                      <p className={`text-sm ${
-                        selectedFile.verdict === 'SAFE' ? 'text-green-300' :
-                        selectedFile.verdict === 'SUSPICIOUS' ? 'text-yellow-300' :
-                        selectedFile.verdict === 'HIGH RISK' ? 'text-orange-300' :
-                        'text-red-300'
-                      }`}>
-                        <strong>Analysis Status:</strong> {selectedFile.analyzed ? 'Analyzed' : 'Pending'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
+            <FileDetailModal fileId={selectedFile.id} onClose={() => setSelectedFile(null)} />
           )}
         </div>
       </div>
