@@ -1,7 +1,7 @@
 import asyncio
 import html
 from typing import Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class ReportGenerator:
@@ -25,7 +25,7 @@ class ReportGenerator:
         report = {
             "file_id": str(file_data.get("id")),
             "report_version": "1.0",
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
             "file_info": {
                 "name": file_data.get("original_name"),
                 "mime_type": file_data.get("mime_type"),

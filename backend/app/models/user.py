@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, Boolean, TIMESTAMP, Enum, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import enum
 from typing import TYPE_CHECKING
@@ -9,6 +9,20 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from app.models.file_record import UploadedFile
+
+
+def _utcnow() -> datetime:
+    """Timezone-aware UTC now, for TIMESTAMP(timezone=True) column defaults.
+
+    datetime.utcnow() (used previously) returns a naive datetime with no
+    tzinfo - Pydantic/FastAPI then serializes it to JSON with no offset
+    (e.g. "2026-07-31T14:34:06"), which browsers interpret as LOCAL time
+    per the ECMAScript Date Time String spec, not UTC. That silently
+    shifted every displayed timestamp app-wide by the viewer's UTC offset
+    (an admin audit log looked hours stale/off). Storing and serializing
+    timezone-aware values fixes this at the source.
+    """
+    return datetime.now(timezone.utc)
 
 
 class UserRole(enum.Enum):
@@ -47,8 +61,8 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     
     # Timestamps
-    created_at = Column(TIMESTAMP, default=datetime.utcnow)
-    last_login = Column(TIMESTAMP, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=_utcnow)
+    last_login = Column(TIMESTAMP(timezone=True), nullable=True)
     
     # Relationships
     uploaded_files = relationship("UploadedFile", back_populates="user", cascade="all, delete-orphan")
@@ -78,9 +92,9 @@ class APIKey(Base):
     key_hash = Column(String, unique=True, nullable=False)
     name = Column(String, nullable=False)  # User-friendly name
     is_active = Column(Boolean, default=True)
-    created_at = Column(TIMESTAMP, default=datetime.utcnow)
-    last_used = Column(TIMESTAMP, nullable=True)
-    expires_at = Column(TIMESTAMP, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), default=_utcnow)
+    last_used = Column(TIMESTAMP(timezone=True), nullable=True)
+    expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
     
     # Relationship
     user = relationship("User", back_populates="api_keys")
@@ -98,7 +112,7 @@ class AuditLog(Base):
     ip_address = Column(String, nullable=True)
     user_agent = Column(String, nullable=True)
     details = Column(String, nullable=True)  # JSON string with additional info
-    timestamp = Column(TIMESTAMP, default=datetime.utcnow, index=True)
+    timestamp = Column(TIMESTAMP(timezone=True), default=_utcnow, index=True)
     
     # Relationship
     user = relationship("User", back_populates="audit_logs")

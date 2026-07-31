@@ -9,8 +9,14 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
+
+# Timezone-aware default so stored timestamps serialize with a UTC offset -
+# see app/models/user.py's _utcnow() for why a naive datetime.utcnow()
+# default breaks how browsers display these timestamps.
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 # revision identifiers
 revision = '001_initial_complete_schema'
@@ -47,8 +53,8 @@ def upgrade() -> None:
         Column('role', user_role_enum, nullable=False, server_default='USER'),
         Column('is_active', Boolean(), nullable=False, server_default='1'),
         Column('is_verified', Boolean(), nullable=False, server_default='0'),
-        Column('created_at', DateTime(), nullable=False, default=datetime.utcnow),
-        Column('last_login', DateTime(), nullable=True),
+        Column('created_at', DateTime(timezone=True), nullable=False, default=_utcnow),
+        Column('last_login', DateTime(timezone=True), nullable=True),
     )
 
     # Create api_keys table
@@ -59,9 +65,9 @@ def upgrade() -> None:
         Column('key_hash', String(255), nullable=False, unique=True),
         Column('name', String(255), nullable=False),
         Column('is_active', Boolean(), nullable=False, server_default='1'),
-        Column('created_at', DateTime(), nullable=False, default=datetime.utcnow),
-        Column('last_used', DateTime(), nullable=True),
-        Column('expires_at', DateTime(), nullable=True),
+        Column('created_at', DateTime(timezone=True), nullable=False, default=_utcnow),
+        Column('last_used', DateTime(timezone=True), nullable=True),
+        Column('expires_at', DateTime(timezone=True), nullable=True),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
     )
 
@@ -76,7 +82,7 @@ def upgrade() -> None:
         Column('ip_address', String(50), nullable=True),
         Column('user_agent', String(500), nullable=True),
         Column('details', Text(), nullable=True),
-        Column('timestamp', DateTime(), nullable=False, default=datetime.utcnow, index=True),
+        Column('timestamp', DateTime(timezone=True), nullable=False, default=_utcnow, index=True),
         sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='SET NULL'),
     )
 
@@ -96,7 +102,7 @@ def upgrade() -> None:
         Column('sha256', String(64), nullable=False, index=True),
         Column('md5', String(32), nullable=True),
         Column('sha1', String(40), nullable=True),
-        Column('upload_time', DateTime(), nullable=False, default=datetime.utcnow),
+        Column('upload_time', DateTime(timezone=True), nullable=False, default=_utcnow),
         Column('analyzed', Boolean(), nullable=False, server_default='0'),
         Column('risk_score', Integer(), nullable=False, server_default='0'),
         Column('verdict', String(50), nullable=True),

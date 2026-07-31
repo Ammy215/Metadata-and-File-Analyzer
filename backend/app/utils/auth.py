@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, OAuth2PasswordBearer
@@ -94,7 +94,7 @@ def check_rate_limit(identifier: str) -> bool:
     Check if request should be rate limited.
     Returns True if rate limit exceeded.
     """
-    now = datetime.utcnow().timestamp()
+    now = datetime.now(timezone.utc).timestamp()
     cutoff = now - LOGIN_ATTEMPT_WINDOW
     
     # Clean old attempts
@@ -113,7 +113,7 @@ def check_rate_limit(identifier: str) -> bool:
 def record_login_attempt(identifier: str, success: bool):
     """Record a login attempt for rate limiting."""
     if not success:
-        login_attempts[identifier].append(datetime.utcnow().timestamp())
+        login_attempts[identifier].append(datetime.now(timezone.utc).timestamp())
         failed_login_attempts[identifier] += 1
 
 
@@ -122,13 +122,13 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode = data.copy()
     
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode.update({
         "exp": expire,
-        "iat": datetime.utcnow(),
+        "iat": datetime.now(timezone.utc),
         "type": "access",
         "jti": secrets.token_urlsafe(16),  # JWT ID for token tracking
     })
@@ -140,11 +140,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def create_refresh_token(data: dict) -> str:
     """Create a JWT refresh token with security claims."""
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     
     to_encode.update({
         "exp": expire,
-        "iat": datetime.utcnow(),
+        "iat": datetime.now(timezone.utc),
         "type": "refresh",
         "jti": secrets.token_urlsafe(16),  # JWT ID for token tracking
     })
@@ -164,7 +164,7 @@ def decode_token(token: str, token_type: str = "access") -> Dict[str, Any]:
         
         # Check expiration explicitly
         exp = payload.get("exp")
-        if exp and datetime.utcnow().timestamp() > exp:
+        if exp and datetime.now(timezone.utc).timestamp() > exp:
             raise JWTError("Token has expired")
         
         return payload
@@ -279,13 +279,13 @@ async def _get_user_by_api_key_value(key: str, db: AsyncSession) -> User:
             detail="Invalid API key"
         )
 
-    if api_key.expires_at and api_key.expires_at < datetime.utcnow():
+    if api_key.expires_at and api_key.expires_at < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API key has expired"
         )
 
-    api_key.last_used = datetime.utcnow()
+    api_key.last_used = datetime.now(timezone.utc)
     await db.commit()
 
     stmt = select(User).where(User.id == api_key.user_id)

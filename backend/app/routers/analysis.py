@@ -15,7 +15,7 @@ from app.schemas.report import (
     AnalysisResultSchema, MetadataEntrySchema, ThreatMatchSchema,
     RiskBreakdownSchema, EntropyResultSchema, ReportSchema
 )
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/v1", tags=["analysis"])
 
@@ -163,7 +163,7 @@ async def get_report(
                 "sha1": file_record.sha1,
             },
             analysis=analysis,
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(timezone.utc),
         )
         
     except HTTPException:

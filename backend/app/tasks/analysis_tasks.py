@@ -4,7 +4,7 @@ what that trades away.
 """
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -316,7 +316,7 @@ async def sweep_once() -> None:
     from app.database import async_session_maker
     from app.models.file_record import UploadedFile
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     async with async_session_maker() as session:
         stuck_stmt = select(UploadedFile).where(

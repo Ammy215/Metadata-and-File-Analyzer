@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from google.oauth2 import id_token
 from google.auth.transport import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import hashlib
 
 from app.database import get_db
@@ -137,7 +137,7 @@ async def login(
     record_login_attempt(identifier, success=True)
 
     # Update last login
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(timezone.utc)
     await db.commit()
     
     # Create tokens
@@ -222,7 +222,7 @@ async def google_auth(
             db.add(user)
     
     # Update last login
-    user.last_login = datetime.utcnow()
+    user.last_login = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(user)
     
@@ -304,7 +304,7 @@ async def get_current_user_info(
 ):
     """Get current user information and update last activity."""
     # Update last_login to track active session (heartbeat)
-    current_user.last_login = datetime.utcnow()
+    current_user.last_login = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(current_user)
     return current_user
@@ -316,7 +316,7 @@ async def session_heartbeat(
     db: AsyncSession = Depends(get_db)
 ):
     """Update user's last activity timestamp (session heartbeat)."""
-    current_user.last_login = datetime.utcnow()
+    current_user.last_login = datetime.now(timezone.utc)
     await db.commit()
     return {"status": "ok", "timestamp": current_user.last_login.isoformat()}
 
@@ -398,7 +398,7 @@ async def create_api_key(
     # Calculate expiration
     expires_at = None
     if key_data.expires_days:
-        expires_at = datetime.utcnow() + timedelta(days=key_data.expires_days)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=key_data.expires_days)
     
     # Create API key record
     api_key = APIKey(

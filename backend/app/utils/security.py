@@ -6,7 +6,7 @@ import re
 import html
 from typing import Any, Dict
 from fastapi import Request, HTTPException, status
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 class SecurityValidator:
@@ -137,7 +137,7 @@ class RateLimiter:
         Check if identifier has exceeded rate limit.
         Returns True if rate limited.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         cutoff = now - timedelta(seconds=window_seconds)
         
         # Initialize if first request

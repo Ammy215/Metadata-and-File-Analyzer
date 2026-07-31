@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, and_
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.database import get_db
 from app.models.user import User, UserRole, AuditLog
@@ -26,13 +26,13 @@ async def get_admin_dashboard_stats(
     total_users = result.scalar()
     
     # Active users (logged in within last 30 days)
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     stmt = select(func.count(User.id)).where(User.last_login >= thirty_days_ago)
     result = await db.execute(stmt)
     active_users = result.scalar()
     
     # New users (registered in last 7 days)
-    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
     stmt = select(func.count(User.id)).where(User.created_at >= seven_days_ago)
     result = await db.execute(stmt)
     new_users = result.scalar()
@@ -51,7 +51,7 @@ async def get_admin_dashboard_stats(
     verdict_counts = {row[0]: row[1] for row in result}
     
     # Files uploaded today
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     stmt = select(func.count(UploadedFile.id)).where(
         func.date(UploadedFile.upload_time) == today
     )
@@ -416,7 +416,7 @@ async def get_audit_logs(
     stmt = select(AuditLog)
     
     # Date filter
-    cutoff_date = datetime.utcnow() - timedelta(days=days)
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
     stmt = stmt.where(AuditLog.timestamp >= cutoff_date)
     
     # Apply filters
@@ -442,7 +442,7 @@ async def get_user_growth_analytics(
 ):
     """Get user growth analytics over time."""
     
-    cutoff_date = datetime.utcnow() - timedelta(days=days)
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
     
     stmt = select(
         func.date(User.created_at).label('date'),
@@ -467,7 +467,7 @@ async def get_file_upload_analytics(
 ):
     """Get file upload analytics over time."""
     
-    cutoff_date = datetime.utcnow() - timedelta(days=days)
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
     
     stmt = select(
         func.date(UploadedFile.upload_time).label('date'),

@@ -1,10 +1,10 @@
 from sqlalchemy import Column, String, Integer, BigInteger, Boolean, TIMESTAMP, Float, Text, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from datetime import datetime
 import uuid
 from typing import TYPE_CHECKING
 from app.database import Base
+from app.models.user import _utcnow
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -30,7 +30,7 @@ class UploadedFile(Base):
     sha256 = Column(String, nullable=False, index=True)
     md5 = Column(String)
     sha1 = Column(String)
-    upload_time = Column(TIMESTAMP, default=datetime.utcnow)
+    upload_time = Column(TIMESTAMP(timezone=True), default=_utcnow)
     analyzed = Column(Boolean, default=False)
     risk_score = Column(Integer, default=0)
     verdict = Column(String)  # SAFE | SUSPICIOUS | HIGH_RISK | CRITICAL
