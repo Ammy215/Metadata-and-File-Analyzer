@@ -12,6 +12,7 @@ class RiskEngine(BaseAnalyzer):
         "critical_keyword_match": 35,  # Up from 25 - these are SERIOUS threats
         "high_keyword_match": 20,      # Up from 15 - actual malware patterns
         "medium_keyword_match": 0,     # DOWN from 8 - too many false positives!
+        "low_keyword_match": 5,        # Generic terms (download/suspicious/etc) - weak signal, still non-zero
         "yara_rule_match": 40,         # High - YARA catches real malware
         "high_entropy": 5,             # DOWN from 20 - compressed files are normal!
         "medium_entropy": 0,           # Compressed/encrypted = normal
@@ -90,6 +91,7 @@ class RiskEngine(BaseAnalyzer):
         critical_count = sum(1 for m in threat_matches if m.get("severity") == "CRITICAL")
         high_count = sum(1 for m in threat_matches if m.get("severity") == "HIGH")
         medium_count = sum(1 for m in threat_matches if m.get("severity") == "MEDIUM")
+        low_count = sum(1 for m in threat_matches if m.get("severity") == "LOW")
         
         if critical_count > 0:
             risk_score += critical_count * RiskEngine.RISK_WEIGHTS["critical_keyword_match"]
@@ -114,8 +116,22 @@ class RiskEngine(BaseAnalyzer):
             # These are too generic (password, admin, config appear in legit docs)
             # Only count them for binary files
             pass  # Skip MEDIUM severity keywords
-        
-        
+
+        if low_count > 0:
+            # Weak signal (generic words like "download"/"suspicious") - a
+            # single hit shouldn't flip the verdict, but it must still move
+            # the score. Previously this branch didn't exist at all, so any
+            # LOW match was recorded as a threat but silently contributed
+            # nothing to risk_score - a file with a real detected pattern
+            # could still show as a flat 0/SAFE.
+            risk_score += low_count * RiskEngine.RISK_WEIGHTS["low_keyword_match"]
+            factors.append({
+                "factor": "low_keyword_match",
+                "weight": RiskEngine.RISK_WEIGHTS["low_keyword_match"],
+                "score_delta": low_count * RiskEngine.RISK_WEIGHTS["low_keyword_match"],
+                "detail": f"{low_count} low-severity keywords found"
+            })
+
         # Entropy-based scoring (FIXED: Don't penalize compression!)
         # Only flag VERY high entropy (7.5+) which indicates encryption -
         # but never for formats that are *expected* to be high-entropy from
