@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, Upload, History, BarChart3, Info, User, LogOut, ChevronDown, ShieldCheck } from 'lucide-react';
+import { Shield, LayoutDashboard, Upload, History, BarChart3, Info, User, LogOut, ChevronDown, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useState } from 'react';
 
@@ -21,7 +21,8 @@ const TopBar = () => {
   const [showAdminMenu, setShowAdminMenu] = useState(false);
 
   const navItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: Upload },
+    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/upload', label: 'Upload', icon: Upload },
     { path: '/history', label: 'History', icon: History },
     { path: '/statistics', label: 'Statistics', icon: BarChart3 },
     { path: '/about', label: 'About', icon: Info },

@@ -11,6 +11,7 @@ import UserActivity from './pages/UserActivity';
 import ThreatAnalysis from './pages/ThreatAnalysis';
 import TopBar from './components/layout/TopBar';
 import UploadAnalyze from './pages/UploadAnalyze';
+import Dashboard from './pages/Dashboard';
 import ScanHistory from './pages/ScanHistory';
 import Statistics from './pages/Statistics';
 import About from './pages/About';
@@ -65,14 +66,15 @@ function PublicRoute({ children }) {
   return isAuthenticated ? <Navigate to="/dashboard" replace /> : children;
 }
 
-// Dashboard Route - Shows different dashboard based on role
+// Dashboard Route - admins get the admin console overview, regular users
+// get a lightweight personal overview (recent scans, quick stats, upload CTA)
 function DashboardRoute() {
   const { isAdmin } = useAuth();
 
   return (
     <>
       <TopBar />
-      {isAdmin() ? <AdminDashboard /> : <UploadAnalyze />}
+      {isAdmin() ? <AdminDashboard /> : <Dashboard />}
     </>
   );
 }
