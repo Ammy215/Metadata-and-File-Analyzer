@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -7,6 +8,7 @@ from app.config import settings
 from app.database import init_db, close_db
 from app.routers import upload, analysis, history, auth, admin
 from app.utils.security import add_security_headers
+from app.tasks.analysis_tasks import start_periodic_sweep
 import logging
 import time
 
@@ -25,6 +27,11 @@ async def lifespan(app: FastAPI):
     lifespan context-manager pattern."""
     try:
         await init_db()
+        # Background analysis runs as FastAPI BackgroundTasks (no separate
+        # worker/broker - see analysis_tasks.py's start_periodic_sweep
+        # docstring for why). This task is the periodic stuck-file retry +
+        # stale-file cleanup sweep; cancelled on shutdown below.
+        sweep_task = asyncio.create_task(start_periodic_sweep())
         logger.info("="*60)
         logger.info("🛡️  FileShield Intelligence Platform v2.0.0")
         logger.info("="*60)
@@ -35,6 +42,7 @@ async def lifespan(app: FastAPI):
         logger.info("✓ XSS protection active")
         logger.info("✓ CORS configured")
         logger.info("✓ Audit logging enabled")
+        logger.info("✓ Background analysis sweep started")
         logger.info(f"✓ API Documentation: http://localhost:8000/docs")
         logger.info(f"✓ Alternative Docs: http://localhost:8000/redoc")
         logger.info("="*60)
@@ -46,6 +54,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    sweep_task.cancel()
     try:
         await close_db()
         logger.info("✓ Database connection closed")

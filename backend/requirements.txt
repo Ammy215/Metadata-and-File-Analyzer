@@ -6,12 +6,6 @@ aiosqlite==0.22.1
 asyncpg==0.29.0
 alembic==1.12.1
 psycopg2-binary==2.9.9
-redis==5.0.1
-celery==5.3.4
-# Registers celery's "flower" subcommand (docker-compose.yml's flower
-# service runs `celery -A ... flower`) - without this package installed,
-# that command doesn't exist and the flower container can't start at all.
-flower==2.0.1
 aiofiles==23.2.1
 python-magic==0.4.27
 pillow==10.4.0

@@ -9,6 +9,13 @@ import ErrorBoundary from './components/ErrorBoundary';
 import './index.css';
 import axios from 'axios';
 
+// Empty string (default) keeps every existing axios.get('/api/v1/...') call
+// relative, which is correct for local Docker (nginx proxies same-origin).
+// For a split deployment (frontend on Vercel, backend on Render - different
+// origins), set VITE_API_URL at build time to the real backend URL; axios
+// prefixes every relative call with it automatically, no call sites change.
+axios.defaults.baseURL = import.meta.env.VITE_API_URL || '';
+
 // Configure axios to prevent caching
 axios.defaults.headers.common['Cache-Control'] = 'no-cache, no-store, must-revalidate';
 axios.defaults.headers.common['Pragma'] = 'no-cache';

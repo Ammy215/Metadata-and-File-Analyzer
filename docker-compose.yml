@@ -17,21 +17,15 @@ services:
       timeout: 5s
       retries: 5
 
-  # Redis Cache
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # FastAPI Backend
+  # Background analysis runs as FastAPI BackgroundTasks in this same
+  # process (see backend/app/tasks/analysis_tasks.py) - no separate
+  # Celery worker/Redis broker. That combination was built and tested
+  # earlier, but free-tier hosting (Render) has no free tier for
+  # always-on background workers, only Web Services/Static Sites/
+  # Postgres/Key-Value - so it was replaced for the actual deployment
+  # target. See analysis_tasks.py's start_periodic_sweep() docstring for
+  # the full reasoning and what it trades away.
   backend:
     build:
       context: ./backend
@@ -46,13 +40,8 @@ services:
       - ./backend/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-fileshield}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-fileshield}
-      REDIS_URL: redis://redis:6379
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
     depends_on:
       db:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     volumes:
       - ./backend:/app
@@ -70,52 +59,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
-
-  # Celery Worker
-  celery_worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    env_file:
-      - ./backend/.env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-fileshield}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-fileshield}
-      REDIS_URL: redis://redis:6379
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-    depends_on:
-      - db
-      - redis
-      - backend
-    volumes:
-      - ./backend:/app
-      - ./backend/uploads:/app/uploads
-    # -B embeds the beat scheduler in this same worker process (runs
-    # cleanup_stale_uploads hourly - see celery_tasks.py's beat_schedule)
-    # rather than needing a whole separate always-on beat service/container
-    # just for one periodic task.
-    command: celery -A app.tasks.celery_tasks worker -B --loglevel=info
-
-  # Celery Flower (Monitoring)
-  flower:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    ports:
-      - "5555:5555"
-    # Same as backend/celery_worker: celery_tasks.py imports app.config.settings,
-    # which requires SECRET_KEY/SUPER_ADMIN_PASSWORD with no defaults - without
-    # this, flower fails Pydantic validation and exits immediately on startup.
-    env_file:
-      - ./backend/.env
-    environment:
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-    depends_on:
-      - redis
-    command: celery -A app.tasks.celery_tasks flower --port=5555
 
   # Frontend (Vite/React, built to static files and served by nginx -
   # see frontend/Dockerfile; no build-time API URL needed since the app
@@ -144,13 +87,10 @@ services:
         condition: service_healthy
       frontend:
         condition: service_started
-      flower:
-        condition: service_started
     command: nginx -g 'daemon off;'
 
 volumes:
   postgres_data:
-  redis_data:
 
 networks:
   default:

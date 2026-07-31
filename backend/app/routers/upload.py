@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Query, Request
+from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Query, Request, BackgroundTasks
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pathlib import Path
@@ -11,12 +11,12 @@ from app.models.user import User
 from app.schemas.report import UploadResponse, AnalysisResultSchema, HistoryResponseSchema, HistoryItemSchema
 from app.utils.file_validator import FileValidator
 from app.utils.auth import get_user_or_api_key, log_audit, get_client_ip
-from app.tasks.celery_tasks import analyze_file_task, is_broker_available
+from app.tasks.analysis_tasks import run_analysis
 from app.config import settings
 
 router = APIRouter(prefix="/api/v1", tags=["uploads"])
 
-# Files are deleted right after analysis completes (see celery_tasks.py),
+# Files are deleted right after analysis completes (see analysis_tasks.py),
 # so under normal operation a user only ever has a handful "in flight" at
 # once. This caps how many can be queued/mid-analysis at the same time,
 # guarding against someone burst-uploading large files faster than
@@ -29,6 +29,7 @@ MAX_PENDING_UPLOADS_PER_USER = 5
 async def upload_file(
     file: UploadFile = File(...),
     request: Request = None,
+    background_tasks: BackgroundTasks = None,
     current_user: User = Depends(get_user_or_api_key),
     db: AsyncSession = Depends(get_db)
 ):
@@ -97,22 +98,10 @@ async def upload_file(
         await db.refresh(uploaded_file)
 
         # Trigger background analysis. The file/DB row above already exist
-        # at this point regardless of what happens next - a queue outage
-        # doesn't lose the upload, it just means analysis hasn't started yet.
-        if not is_broker_available():
-            raise HTTPException(
-                status_code=503,
-                detail="Your file was saved, but the analysis queue is currently unavailable. "
-                       "Please try again shortly - analysis will not start automatically until then.",
-            )
-        try:
-            analyze_file_task.delay(str(file_id), str(file_path))
-        except Exception:
-            raise HTTPException(
-                status_code=503,
-                detail="Your file was saved, but the analysis queue is currently unavailable. "
-                       "Please try again shortly - analysis will not start automatically until then.",
-            )
+        # at this point regardless of what happens next - if the process
+        # restarts mid-analysis, the periodic sweep in analysis_tasks.py
+        # detects the stuck (analyzed=False) record and retries it.
+        background_tasks.add_task(run_analysis, str(file_id), str(file_path))
 
         # Log audit
         await log_audit(

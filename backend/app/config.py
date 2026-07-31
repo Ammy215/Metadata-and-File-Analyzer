@@ -7,12 +7,6 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./fileshield.db"
     
-    # Redis
-    REDIS_URL: str = "redis://localhost:6379"
-    
-    # Celery
-    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
     
     # File Upload
     MAX_FILE_SIZE: int = 104857600  # 100 MB
