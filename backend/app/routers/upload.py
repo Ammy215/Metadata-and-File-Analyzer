@@ -16,6 +16,14 @@ from app.config import settings
 
 router = APIRouter(prefix="/api/v1", tags=["uploads"])
 
+# Files are deleted right after analysis completes (see celery_tasks.py),
+# so under normal operation a user only ever has a handful "in flight" at
+# once. This caps how many can be queued/mid-analysis at the same time,
+# guarding against someone burst-uploading large files faster than
+# analysis+deletion can keep up with - the one gap the delete-after-analysis
+# behavior alone doesn't cover.
+MAX_PENDING_UPLOADS_PER_USER = 5
+
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload_file(
@@ -34,6 +42,20 @@ async def upload_file(
     Returns: file_id, original_name, size_bytes
     """
     try:
+        # Reject before reading any file bytes if this user already has too
+        # many uploads still awaiting analysis - see MAX_PENDING_UPLOADS_PER_USER.
+        pending_stmt = select(func.count(UploadedFile.id)).where(
+            UploadedFile.user_id == current_user.id,
+            UploadedFile.analyzed == False,  # noqa: E712 - SQLAlchemy needs `== False`, not `is False`
+        )
+        pending_count = (await db.execute(pending_stmt)).scalar()
+        if pending_count >= MAX_PENDING_UPLOADS_PER_USER:
+            raise HTTPException(
+                status_code=429,
+                detail=f"You have {pending_count} uploads still being analyzed. "
+                       f"Please wait for those to finish before uploading more.",
+            )
+
         # Ensure upload directory exists
         upload_dir = Path(settings.UPLOAD_DIR)
         upload_dir.mkdir(exist_ok=True)

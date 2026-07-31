@@ -91,7 +91,11 @@ services:
     volumes:
       - ./backend:/app
       - ./backend/uploads:/app/uploads
-    command: celery -A app.tasks.celery_tasks worker --loglevel=info
+    # -B embeds the beat scheduler in this same worker process (runs
+    # cleanup_stale_uploads hourly - see celery_tasks.py's beat_schedule)
+    # rather than needing a whole separate always-on beat service/container
+    # just for one periodic task.
+    command: celery -A app.tasks.celery_tasks worker -B --loglevel=info
 
   # Celery Flower (Monitoring)
   flower:

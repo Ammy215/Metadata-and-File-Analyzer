@@ -49,6 +49,11 @@ uploads/
 # Redis
 dump.rdb
 
+# Celery Beat runtime state (created in backend/ via the volume mount,
+# not source - tracks "when did each periodic task last run")
+celerybeat-schedule
+celerybeat.pid
+
 # Logs
 logs/
 *.log

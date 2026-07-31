@@ -11,6 +11,13 @@ celery_app = Celery(
     backend=settings.CELERY_RESULT_BACKEND,
 )
 
+celery_app.conf.beat_schedule = {
+    "cleanup-stale-uploads-hourly": {
+        "task": "app.tasks.celery_tasks.cleanup_stale_uploads",
+        "schedule": 3600.0,  # every hour
+    },
+}
+
 celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
@@ -90,6 +97,65 @@ def analyze_file_task(self, file_id: str, file_path: str):
         logger.error(f"Error analyzing file {file_id}: {exc}")
         # Retry with exponential backoff
         raise self.retry(exc=exc, countdown=2 ** self.request.retries)
+
+
+@celery_app.task
+def cleanup_stale_uploads():
+    """
+    Safety net for the delete-after-analysis behavior in _run_analysis:
+    catches files left behind by anything that didn't reach that point (a
+    crashed/exhausted-retries task, a worker killed mid-analysis, etc.) so
+    nothing lingers on disk indefinitely just because one analysis run
+    failed. Runs hourly (see beat_schedule above); deletes files attached
+    to uploads between 48 hours and 30 days old - the lower bound gives a
+    real analysis run time to finish normally without racing it, the upper
+    bound keeps the query from re-scanning the same already-handled rows
+    forever as the table grows over time.
+    """
+    import asyncio
+    asyncio.run(_cleanup_stale_uploads_async())
+
+
+async def _cleanup_stale_uploads_async():
+    from datetime import datetime, timedelta
+    from pathlib import Path
+    from sqlalchemy import select
+    from app.database import async_session_maker, engine
+    from app.models.file_record import UploadedFile
+
+    # See the matching comment in _run_analysis - same shared-engine/
+    # per-task-event-loop issue applies here too.
+    # close=False: de-reference the old pool without trying to actively
+    # close its connections - those belong to a previous (already-closed)
+    # event loop, and attempting a graceful close on them throws its own
+    # "Event loop is closed" error even though the task itself still
+    # succeeds. de-referencing lets them be garbage-collected instead.
+    await engine.dispose(close=False)
+
+    now = datetime.utcnow()
+    window_start = now - timedelta(days=30)
+    window_end = now - timedelta(hours=48)
+
+    deleted_count = 0
+    async with async_session_maker() as session:
+        stmt = select(UploadedFile).where(
+            UploadedFile.upload_time >= window_start,
+            UploadedFile.upload_time < window_end,
+        )
+        result = await session.execute(stmt)
+        stale_files = result.scalars().all()
+
+        for file_record in stale_files:
+            file_path = Path(settings.UPLOAD_DIR) / file_record.stored_name
+            try:
+                if file_path.exists():
+                    file_path.unlink()
+                    deleted_count += 1
+            except OSError as e:
+                logger.warning(f"Cleanup sweep could not delete {file_path}: {e}")
+
+    if deleted_count:
+        logger.info(f"Cleanup sweep deleted {deleted_count} stale upload(s)")
 
 
 _EXECUTABLE_MIME_SIGNATURES = {
@@ -176,7 +242,24 @@ async def _run_analysis(file_id: str, file_path: str):
     import uuid
     from pathlib import Path
     from sqlalchemy import select, delete
-    from app.database import async_session_maker
+    from app.database import async_session_maker, engine
+
+    # This worker process is long-lived and each Celery task gets its own
+    # fresh event loop via asyncio.run() - but the async engine/pool above
+    # is a module-level singleton shared across every task. A pooled asyncpg
+    # connection cached by a *previous* task's (now-closed) event loop is
+    # not safe to reuse under a new one; disposing here forces the pool to
+    # hand out connections bound to the current loop instead. Without this,
+    # tasks intermittently crash with "Future ... attached to a different
+    # loop" depending on pool state - confirmed live when cleanup_stale_uploads
+    # hit exactly this after several analyze_file_task runs had already
+    # cycled through the pool in this same process.
+    # close=False: de-reference the old pool without trying to actively
+    # close its connections - those belong to a previous (already-closed)
+    # event loop, and attempting a graceful close on them throws its own
+    # "Event loop is closed" error even though the task itself still
+    # succeeds. de-referencing lets them be garbage-collected instead.
+    await engine.dispose(close=False)
     from app.models.file_record import UploadedFile, MetadataEntry, ThreatMatch, EntropyResult, RiskBreakdown
     from app.analyzers.hash_analyzer import HashAnalyzer
     from app.analyzers.entropy_analyzer import EntropyAnalyzer
@@ -340,3 +423,16 @@ async def _run_analysis(file_id: str, file_path: str):
             ))
 
         await session.commit()
+
+    # Raw bytes are only ever needed transiently, during analysis itself -
+    # nothing in the app serves the original file back afterward (only a
+    # generated PDF report), and every actual result now lives in the rows
+    # just committed above. Deleting here (not on failure - a failed/retrying
+    # task still needs the file present) is the single biggest lever against
+    # unbounded disk growth, especially for the up-to-2GB video/archive
+    # category. Anything this misses (task crashes before reaching here,
+    # etc.) is caught by the separate cleanup_stale_uploads sweep.
+    try:
+        file_path_obj.unlink(missing_ok=True)
+    except OSError as e:
+        logger.warning(f"Could not delete analyzed file {file_path}: {e}")
