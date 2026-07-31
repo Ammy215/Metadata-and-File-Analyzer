@@ -1,0 +1,56 @@
+fastapi==0.115.6
+uvicorn[standard]==0.24.0
+python-multipart==0.0.18
+sqlalchemy==2.0.23
+aiosqlite==0.22.1
+asyncpg==0.29.0
+alembic==1.12.1
+psycopg2-binary==2.9.9
+redis==5.0.1
+celery==5.3.4
+# Registers celery's "flower" subcommand (docker-compose.yml's flower
+# service runs `celery -A ... flower`) - without this package installed,
+# that command doesn't exist and the flower container can't start at all.
+flower==2.0.1
+aiofiles==23.2.1
+python-magic==0.4.27
+pillow==10.4.0
+piexif==1.1.3
+pdfplumber==0.10.3
+python-docx==1.1.2
+pefile==2023.2.7
+yara-python==4.3.1
+openpyxl==3.1.2
+weasyprint==60.1
+# weasyprint 60.1 calls pydyf.PDF(version, identifier) internally - pydyf
+# 0.9+ removed those constructor args entirely (breaking change), so an
+# unpinned pydyf resolves to the latest version and PDF export crashes with
+# "PDF.__init__() takes 1 positional argument but 3 were given" on every
+# single report. 0.8.0 is the newest release whose signature still matches
+# what this weasyprint version actually calls.
+pydyf==0.8.0
+click==8.1.7
+pydantic==2.5.0
+pydantic-settings==2.1.0
+email-validator==2.3.0
+python-dotenv==1.0.0
+pyyaml==6.0.1
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Authentication & Security
+# python-jose has known CVEs (algorithm-confusion, JWE decompression-bomb)
+# but neither applies here: decode_token() hardcodes a single fixed
+# algorithm (no attacker-chosen alg) and this app never issues/accepts
+# JWE tokens, only signed JWS - kept as-is rather than migrating libraries
+# for CVEs that aren't reachable through this app's actual usage.
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+# passlib 1.7.4 predates bcrypt's 4.1.0 API change (removed __about__),
+# which otherwise throws a harmless-but-noisy warning on every hash/verify
+# call - pinned below rather than replacing passlib itself.
+bcrypt==4.0.1
+google-auth==2.23.4
+google-auth-oauthlib==1.1.0
+google-auth-httplib2==0.1.1
+

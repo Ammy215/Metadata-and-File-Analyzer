@@ -1,0 +1,32 @@
+# Secrets - never bake these into an image layer
+.env
+.env.*
+!.env.example
+
+# Local database and uploaded files
+*.db
+*.sqlite
+*.sqlite3
+uploads/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+venv/
+.venv/
+env/
+
+# Alembic bytecode
+alembic/**/__pycache__/
+
+# Editor/OS cruft
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Version control (harmless if absent)
+.git/
+.gitignore

@@ -1,0 +1,15 @@
+{
+  "application": "MyApp",
+  "version": "1.0.0",
+  "environment": "production",
+  "database": {
+    "host": "db.example.com",
+    "port": 5432,
+    "name": "myapp_db"
+  },
+  "features": {
+    "authentication": true,
+    "logging": true,
+    "caching": true
+  }
+}

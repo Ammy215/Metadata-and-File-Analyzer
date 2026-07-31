@@ -1,0 +1,9 @@
+{
+    "api_key": "secret_key_123",
+    "database": {
+        "host": "localhost",
+        "user": "admin",
+        "password": "P@ssw0rd"
+    },
+    "encryption": true
+}

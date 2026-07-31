@@ -1,0 +1,7 @@
+
+    This is a test document for FileShield analysis.
+    It contains some normal text and some suspicious keywords:
+    password, admin, confidential, secret, database, SQL
+    Email: test@example.com
+    Credit Card: 4532-1234-5678-9010
+    

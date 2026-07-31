@@ -1,0 +1,9 @@
+This is a normal text document with ordinary content.
+
+It contains some common words like password, admin, and config,
+but in normal contexts like system administration and configuration.
+
+This document should be marked as SAFE since it's just normal text.
+
+No malicious intent or actual threats here.
+Just regular documentation about server setup.
