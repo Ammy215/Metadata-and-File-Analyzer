@@ -51,9 +51,14 @@ export const AuthProvider = ({ children }) => {
         await axios.post('/api/v1/auth/heartbeat');
         console.log('Session heartbeat sent');
       } catch (error) {
-        // If heartbeat fails with 401, session expired - logout
-        if (error.response?.status === 401) {
-          console.error('Session expired');
+        // 401: token expired/invalid. 403: account was deactivated/banned
+        // since login (the backend already rejects every request for a
+        // banned account immediately - it's the frontend that previously
+        // didn't react to that until the token separately expired, leaving
+        // a banned user's tab looking "logged in" while everything silently
+        // failed). Either way the session is over - log out.
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          console.error('Session no longer valid:', error.response?.data?.detail || error.response?.data?.error);
           logout();
         }
       }
