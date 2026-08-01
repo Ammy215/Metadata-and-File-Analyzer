@@ -24,11 +24,31 @@ _CHUNK_SIZE = 1024 * 1024  # 1 MiB - streamed rather than loading the whole
 # zip-compressed, so they're deliberately left out here.
 _OOXML_EXTENSIONS = {'.xlsx', '.docx', '.pptx', '.odt', '.ods', '.odp'}
 
+# PDF is a different case from the formats above: unlike video/audio/zip
+# containers, a PDF is NOT *guaranteed* to be high-entropy - a plain,
+# uncompressed, text-only PDF can legitimately sit at low entropy. But any
+# PDF carrying a meaningful amount of embedded image data (DCTDecode/
+# JPXDecode - already-compressed JPEG/JPEG2000 bytes) or a FlateDecode
+# -compressed content stream - which is the default in effectively every
+# real-world PDF writer (Prawn, ReportLab, wkhtmltopdf, LibreOffice, Word's
+# "Save as PDF", etc.) - lands in the same 7.5-8.0 range purely from that
+# legitimate compression, confirmed both by a real user-generated Prawn PDF
+# (7.94/8.0, flagged CRITICAL/"Obfuscated / Encrypted") and reproduced here
+# with a synthetic PDF containing only a placeholder image (7.98/8.0). PDF
+# is included here on that basis: in practice this is the common case, not
+# an edge case. Trade-off: this also stops flagging a genuinely
+# natively-encrypted PDF (PDF supports RC4/AES via /Encrypt) via entropy -
+# but there's no dedicated /Encrypt detector in PDFAnalyzer today either, so
+# this heuristic wasn't reliably catching that case in a targeted way to
+# begin with; a raw /Encrypt marker check (mirroring PDFAnalyzer's existing
+# _JS_MARKERS/_FORM_MARKERS pattern) would be a strictly better replacement
+# signal if that's ever wanted.
 _COMPRESSION_EXPECTED_EXTENSIONS = (
     FileValidator.VIDEO_EXTENSIONS
     | FileValidator.AUDIO_EXTENSIONS
     | FileValidator.ARCHIVE_EXTENSIONS
     | _OOXML_EXTENSIONS
+    | {'.pdf'}
 )
 
 
