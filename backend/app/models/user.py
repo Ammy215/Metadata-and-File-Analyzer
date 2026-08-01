@@ -63,6 +63,11 @@ class User(Base):
     # Timestamps
     created_at = Column(TIMESTAMP(timezone=True), default=_utcnow)
     last_login = Column(TIMESTAMP(timezone=True), nullable=True)
+    # Set only by an explicit POST /auth/logout - lets "is this user
+    # actually online" be a real fact (last_logout newer than last_login)
+    # instead of purely inferred from how recently a heartbeat landed,
+    # which can't tell a genuine logout apart from a session just idling.
+    last_logout = Column(TIMESTAMP(timezone=True), nullable=True)
     
     # Relationships
     uploaded_files = relationship("UploadedFile", back_populates="user", cascade="all, delete-orphan")

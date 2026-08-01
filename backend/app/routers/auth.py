@@ -164,6 +164,34 @@ async def login(
     }
 
 
+@router.post("/logout")
+async def logout(
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Record an explicit logout. JWTs aren't revoked here (this app has no
+    token blocklist - the token still technically works until it expires),
+    but last_logout lets the admin's "who's online" view distinguish a real
+    logout from a session that's merely between heartbeats, instead of
+    relying purely on how recently the last heartbeat landed."""
+    current_user.last_logout = datetime.now(timezone.utc)
+    await db.commit()
+
+    await log_audit(
+        db=db,
+        user_id=str(current_user.id),
+        action="LOGOUT",
+        resource_type="user",
+        resource_id=str(current_user.id),
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("User-Agent"),
+        details=f"User logged out: {current_user.email}"
+    )
+
+    return {"message": "Logged out successfully"}
+
+
 @router.post("/google", response_model=TokenResponse)
 async def google_auth(
     auth_data: GoogleAuthRequest,

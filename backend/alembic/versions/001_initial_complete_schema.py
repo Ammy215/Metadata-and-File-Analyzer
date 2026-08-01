@@ -55,6 +55,7 @@ def upgrade() -> None:
         Column('is_verified', Boolean(), nullable=False, server_default='0'),
         Column('created_at', DateTime(timezone=True), nullable=False, default=_utcnow),
         Column('last_login', DateTime(timezone=True), nullable=True),
+        Column('last_logout', DateTime(timezone=True), nullable=True),
     )
 
     # Create api_keys table

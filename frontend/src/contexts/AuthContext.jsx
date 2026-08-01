@@ -147,6 +147,14 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
+    // Best-effort: tell the backend so the admin's "who's online" view
+    // reflects this immediately (see last_logout) instead of waiting for
+    // the stale heartbeat timestamp to age out. Fire-and-forget - local
+    // logout must succeed even if this call fails (expired token, offline,
+    // account already banned), since the user needs to be able to leave
+    // their own browser session regardless of backend/network state.
+    axios.post('/api/v1/auth/logout').catch(() => {});
+
     sessionStorage.removeItem('token');
     setToken(null);
     setUser(null);

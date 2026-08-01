@@ -151,7 +151,8 @@ async def list_all_users(
                 "is_active": user.is_active,
                 "is_verified": user.is_verified,
                 "created_at": user.created_at.isoformat() if user.created_at else None,
-                "last_login": user.last_login.isoformat() if user.last_login else None
+                "last_login": user.last_login.isoformat() if user.last_login else None,
+                "last_logout": user.last_logout.isoformat() if user.last_logout else None
             }
             for user in users
         ]

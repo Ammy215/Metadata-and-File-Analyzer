@@ -120,9 +120,17 @@ export default function UserActivity() {
       day: 'numeric'
     });
     
+    // An explicit logout since this login always wins over the heartbeat
+    // -staleness guess below - it's a real fact, not an inference, and
+    // otherwise a user who just logged out keeps showing "active" until
+    // their frozen last_login timestamp ages past the 10-minute window.
+    const explicitlyLoggedOut = Boolean(
+      user.last_logout && new Date(user.last_logout) > loginTime
+    );
+
     // Current logged-in user is ALWAYS active
     // OR within 10 minutes for other users (heartbeat updates every 2 min + buffer)
-    const isActive = isCurrentUser || diffMins < 10;
+    const isActive = !explicitlyLoggedOut && (isCurrentUser || diffMins < 10);
     
     if (isActive) {
       // Currently active - show session start to now
@@ -161,23 +169,30 @@ export default function UserActivity() {
 
   const isOnline = (user) => {
     if (!user.last_login) return false;
-    
+
     // Current user is always online
     if (currentUser && user.email === currentUser.email) return true;
-    
+
     // Parse the last_login timestamp from backend (UTC ISO format)
     const loginTime = new Date(user.last_login);
+
+    // An explicit logout since this login always wins over the heartbeat
+    // -staleness guess below - see calculateSessionDuration for why.
+    if (user.last_logout && new Date(user.last_logout) > loginTime) {
+      return false;
+    }
+
     const now = new Date();
     const diffMs = now - loginTime;
     const diffMins = diffMs / 60000;
-    
+
     // Debug logging
     console.log(`[Activity Check] User: ${user.email}`);
     console.log(`  - Last login: ${user.last_login}`);
     console.log(`  - Time diff: ${diffMins.toFixed(2)} minutes ago`);
     console.log(`  - Is current user: ${currentUser && user.email === currentUser.email}`);
     console.log(`  - Should be active: ${diffMins < 10}`);
-    
+
     // Active if within 10 minutes (heartbeat updates every 2 minutes, gives buffer)
     return diffMins < 10;
   };
