@@ -6,6 +6,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { getErrorMessage } from '../lib/getErrorMessage';
+import FileDetailModal from '../components/FileDetailModal';
 
 const VERDICT_STYLES = {
   SAFE: 'text-green-400 bg-green-500/10 border-green-500/30',
@@ -19,6 +20,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [recent, setRecent] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedFileId, setSelectedFileId] = useState(null);
 
   useEffect(() => {
     const fetchOverview = async () => {
@@ -177,7 +179,11 @@ export default function Dashboard() {
               </div>
               <div className="divide-y divide-white/10">
                 {recent.map((item) => (
-                  <div key={item.file_id} className="py-3 flex items-center justify-between">
+                  <button
+                    key={item.file_id}
+                    onClick={() => setSelectedFileId(item.file_id)}
+                    className="w-full py-3 flex items-center justify-between text-left hover:bg-white/5 rounded-lg px-2 -mx-2 transition-colors"
+                  >
                     <div className="flex items-center gap-3 min-w-0">
                       <FileText className="w-5 h-5 text-slate-400 flex-shrink-0" />
                       <div className="min-w-0">
@@ -191,13 +197,17 @@ export default function Dashboard() {
                     <span className={`px-3 py-1 rounded-full border text-xs font-semibold flex-shrink-0 ${VERDICT_STYLES[item.verdict] || 'text-slate-400 bg-slate-500/10 border-slate-500/30'}`}>
                       {item.verdict || 'PENDING'}
                     </span>
-                  </div>
+                  </button>
                 ))}
               </div>
             </motion.div>
           </>
         )}
       </div>
+
+      {selectedFileId && (
+        <FileDetailModal fileId={selectedFileId} onClose={() => setSelectedFileId(null)} />
+      )}
     </div>
   );
 }
