@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { FileText, Shield, Zap, AlertCircle, CheckCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -28,6 +28,7 @@ export default function UploadAnalyze() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState(null);
+  const fileInputRef = useRef(null);
 
   const handleFileUpload = async (file) => {
     setUploading(true);
@@ -130,8 +131,15 @@ export default function UploadAnalyze() {
               <p className="text-white font-medium">Analyzing file...</p>
             </div>
           ) : (
-            <label>
+            <>
+              {/* Hidden input triggered programmatically via fileInputRef -
+                  not wrapped in a <label> relying on native click-forwarding,
+                  since the visible "Choose File" control is a nested
+                  <button>: clicking a button inside a label does not forward
+                  the click to the label's associated input in any major
+                  browser, so that control silently did nothing. */}
               <input
+                ref={fileInputRef}
                 type="file"
                 className="hidden"
                 onChange={(e) => {
@@ -145,10 +153,11 @@ export default function UploadAnalyze() {
               />
               <AnimatedDropZone
                 onFileSelect={handleFileUpload}
+                onBrowseClick={() => fileInputRef.current?.click()}
                 isUploading={uploading}
                 uploadProgress={uploadProgress}
               />
-            </label>
+            </>
           )}
           <p className="text-slate-500 text-sm text-center mt-4">
             Supports: PDF, DOCX, TXT, EXE, ZIP, and more (up to 2 GB depending on file type)

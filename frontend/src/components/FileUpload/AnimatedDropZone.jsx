@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, File } from 'lucide-react';
 import { useState } from 'react';
 
-export const AnimatedDropZone = ({ onFileSelect, isUploading = false, uploadProgress = 0 }) => {
+export const AnimatedDropZone = ({ onFileSelect, onBrowseClick, isUploading = false, uploadProgress = 0 }) => {
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDragOver = (e) => {
@@ -44,6 +44,7 @@ export const AnimatedDropZone = ({ onFileSelect, isUploading = false, uploadProg
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onClick={() => !isUploading && onBrowseClick?.()}
     >
       {/* Animated Background Particles */}
       <motion.div
