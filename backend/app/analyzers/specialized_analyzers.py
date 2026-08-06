@@ -227,6 +227,12 @@ class PDFAnalyzer(BaseAnalyzer):
     _JS_MARKERS = (b"/JavaScript", b"/JS")
     _FORM_MARKERS = (b"/AcroForm",)
     _EMBEDDED_MARKERS = (b"/EmbeddedFile", b"/EmbeddedFiles")
+    # /OpenAction wires an action (often JS) to run automatically when the
+    # document is opened - the actual dangerous pattern, vs. JS merely
+    # present somewhere but never triggered. Doesn't cover /AA (Additional
+    # Actions - page open/close, save, print triggers), which can also
+    # auto-run JS but wasn't part of what was asked for here.
+    _OPENACTION_MARKERS = (b"/OpenAction",)
 
     async def analyze(self, file_path: Path) -> Dict[str, Any]:
         """
@@ -246,6 +252,7 @@ class PDFAnalyzer(BaseAnalyzer):
             "pages": 0,
             "has_embedded_objects": False,
             "has_javascript": False,
+            "has_auto_execute_javascript": False,
             "has_forms": False,
             "text_content": "",
         }
@@ -271,6 +278,8 @@ class PDFAnalyzer(BaseAnalyzer):
             with open(file_path, "rb") as fh:
                 raw = fh.read()
             results["has_javascript"] = any(marker in raw for marker in cls._JS_MARKERS)
+            has_openaction = any(marker in raw for marker in cls._OPENACTION_MARKERS)
+            results["has_auto_execute_javascript"] = results["has_javascript"] and has_openaction
             results["has_forms"] = any(marker in raw for marker in cls._FORM_MARKERS)
             results["has_embedded_objects"] = any(marker in raw for marker in cls._EMBEDDED_MARKERS)
         except Exception:

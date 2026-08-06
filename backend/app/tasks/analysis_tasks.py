@@ -269,6 +269,7 @@ def _extra_analyzer_metadata_entries(extension: str, extra_data: dict) -> list:
     if extension == ".pdf":
         add("pdf_security", "pages", extra_data.get("pages", 0))
         add("pdf_security", "has_javascript", extra_data.get("has_javascript", False), flagged=extra_data.get("has_javascript", False))
+        add("pdf_security", "has_auto_execute_javascript", extra_data.get("has_auto_execute_javascript", False), flagged=extra_data.get("has_auto_execute_javascript", False))
         add("pdf_security", "has_embedded_objects", extra_data.get("has_embedded_objects", False), flagged=extra_data.get("has_embedded_objects", False))
         add("pdf_security", "has_forms", extra_data.get("has_forms", False))
 
