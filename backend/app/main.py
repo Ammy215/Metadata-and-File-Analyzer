@@ -4,8 +4,9 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from app.config import settings
-from app.database import init_db, close_db
+from app.database import init_db, close_db, async_session_maker
 from app.routers import upload, analysis, history, auth, admin
 from app.utils.security import add_security_headers
 from app.tasks.analysis_tasks import start_periodic_sweep
@@ -119,7 +120,22 @@ app.include_router(history.router)  # History routes
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    """Comprehensive health check endpoint."""
+    """Comprehensive health check endpoint.
+
+    Runs a real SELECT 1 against the database rather than hardcoding
+    "Connected" - besides making the field honest, this doubles as the
+    natural way an uptime pinger keeps a scale-to-zero Postgres provider
+    (e.g. Neon) warm: a request that never touches the DB doesn't reset
+    its idle timer, only a real query does.
+    """
+    try:
+        async with async_session_maker() as session:
+            await session.execute(text("SELECT 1"))
+        db_status = "Connected"
+    except Exception as e:
+        logger.error(f"Health check DB probe failed: {e}")
+        db_status = "Unavailable"
+
     return {
         "status": "healthy",
         "version": "2.0.0",
@@ -140,7 +156,7 @@ async def health_check():
             "api_keys": True,
             "audit_logs": True
         },
-        "database": "Connected"
+        "database": db_status
     }
 
 
