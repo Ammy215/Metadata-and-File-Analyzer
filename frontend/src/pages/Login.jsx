@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Shield, Mail, Lock, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Shield, Mail, Lock, AlertCircle, Loader2, Eye, EyeOff, UserRound } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, guestLogin } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -16,6 +16,24 @@ export default function Login() {
   const [error, setError] = useState('');
   const [unverified, setUnverified] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
+
+  const handleGuestLogin = async () => {
+    setError('');
+    setGuestLoading(true);
+
+    const result = await guestLogin();
+
+    if (result.success) {
+      toast.success('Continuing as guest - 3 uploads, 4-hour session.');
+      navigate('/dashboard');
+    } else {
+      setError(result.error);
+      toast.error(result.error);
+    }
+
+    setGuestLoading(false);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -166,6 +184,35 @@ export default function Login() {
           </form>
 
           {/* Divider */}
+          <div className="my-6 flex items-center gap-4">
+            <div className="flex-1 h-px bg-white/10"></div>
+            <span className="text-sm text-slate-400">OR</span>
+            <div className="flex-1 h-px bg-white/10"></div>
+          </div>
+
+          {/* Guest Login */}
+          <button
+            type="button"
+            onClick={handleGuestLogin}
+            disabled={guestLoading}
+            className="w-full bg-white/5 border border-white/10 text-slate-200 font-semibold py-3 rounded-lg hover:bg-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {guestLoading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Starting guest session...
+              </>
+            ) : (
+              <>
+                <UserRound className="w-5 h-5" />
+                Continue as Guest
+              </>
+            )}
+          </button>
+          <p className="text-center text-xs text-slate-400 mt-2">
+            No account needed - 3 uploads, expires in 4 hours
+          </p>
+
           <div className="my-6 flex items-center gap-4">
             <div className="flex-1 h-px bg-white/10"></div>
             <span className="text-sm text-slate-400">OR</span>

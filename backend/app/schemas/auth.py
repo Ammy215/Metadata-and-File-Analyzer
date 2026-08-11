@@ -74,6 +74,7 @@ class UserResponse(BaseModel):
     is_verified: bool
     created_at: datetime
     last_login: Optional[datetime]
+    guest_expires_at: Optional[datetime] = None
 
     @field_validator('role', mode='before')
     @classmethod

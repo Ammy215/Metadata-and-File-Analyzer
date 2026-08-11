@@ -6,6 +6,7 @@ from google.auth.transport import requests
 from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets
+import uuid
 
 from app.database import get_db
 from app.models.user import User, UserRole, AuthProvider, APIKey
@@ -27,6 +28,7 @@ from app.config import settings
 
 OTP_EXPIRE_MINUTES = 10
 OTP_MAX_ATTEMPTS = 5
+GUEST_SESSION_HOURS = 4
 
 
 def _generate_otp() -> str:
@@ -302,6 +304,57 @@ async def logout(
     )
 
     return {"message": "Logged out successfully"}
+
+
+@router.post("/guest-login", response_model=TokenResponse)
+async def guest_login(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a temporary, real User row (role=GUEST) and log straight in -
+    no form, no verification. Deliberately not enforced as "first-time
+    only" (that can only ever be approximated via fingerprinting, which
+    isn't worth the false positives) - the upload cap and short expiry
+    keep the blast radius low regardless of how many times someone uses it.
+    """
+    await check_general_rate_limit(request, max_requests=5, window_seconds=3600)
+
+    guest_id = uuid.uuid4()
+    guest_user = User(
+        email=f"guest-{guest_id}@fileshield.local",
+        username=f"guest_{str(guest_id)[:8]}",
+        full_name="Guest User",
+        hashed_password=get_password_hash(secrets.token_urlsafe(32)),
+        auth_provider=AuthProvider.LOCAL,
+        role=UserRole.GUEST,
+        is_active=True,
+        is_verified=True,  # guests skip OTP entirely - nothing to verify
+        guest_expires_at=datetime.now(timezone.utc) + timedelta(hours=GUEST_SESSION_HOURS),
+    )
+    db.add(guest_user)
+    await db.commit()
+    await db.refresh(guest_user)
+
+    access_token = create_access_token(data={"sub": str(guest_user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(guest_user.id)})
+
+    await log_audit(
+        db=db,
+        user_id=str(guest_user.id),
+        action="GUEST_LOGIN",
+        resource_type="user",
+        resource_id=str(guest_user.id),
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("User-Agent"),
+        details=f"Guest session created, expires in {GUEST_SESSION_HOURS}h"
+    )
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    }
 
 
 @router.post("/google", response_model=TokenResponse)

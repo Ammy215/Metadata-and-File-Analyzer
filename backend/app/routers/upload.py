@@ -7,7 +7,7 @@ import os
 import hashlib
 from app.database import get_db
 from app.models.file_record import UploadedFile
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.report import UploadResponse, AnalysisResultSchema, HistoryResponseSchema, HistoryItemSchema
 from app.utils.file_validator import FileValidator
 from app.utils.auth import get_user_or_api_key, log_audit, get_client_ip
@@ -23,6 +23,11 @@ router = APIRouter(prefix="/api/v1", tags=["uploads"])
 # analysis+deletion can keep up with - the one gap the delete-after-analysis
 # behavior alone doesn't cover.
 MAX_PENDING_UPLOADS_PER_USER = 5
+
+# Total (not just pending) uploads a guest account may ever make across its
+# whole 4-hour session - keeps the trial genuinely limited rather than just
+# rate-limited.
+GUEST_MAX_TOTAL_UPLOADS = 3
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -56,6 +61,18 @@ async def upload_file(
                 detail=f"You have {pending_count} uploads still being analyzed. "
                        f"Please wait for those to finish before uploading more.",
             )
+
+        if current_user.role == UserRole.GUEST:
+            total_stmt = select(func.count(UploadedFile.id)).where(
+                UploadedFile.user_id == current_user.id,
+            )
+            total_count = (await db.execute(total_stmt)).scalar()
+            if total_count >= GUEST_MAX_TOTAL_UPLOADS:
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Guest accounts are limited to {GUEST_MAX_TOTAL_UPLOADS} uploads. "
+                           f"Register for a free account to upload more.",
+                )
 
         # Ensure upload directory exists
         upload_dir = Path(settings.UPLOAD_DIR)

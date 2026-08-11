@@ -176,6 +176,21 @@ def decode_token(token: str, token_type: str = "access") -> Dict[str, Any]:
         )
 
 
+def _raise_if_guest_expired(user: User) -> None:
+    """Immediate cutoff for a guest whose 4-hour window has passed, rather
+    than waiting for the periodic sweep (up to 15 min later) to physically
+    delete the row. Shared by both auth paths below (JWT and API key)."""
+    if user.role == UserRole.GUEST and user.guest_expires_at:
+        expires_at = user.guest_expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) > expires_at:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Guest session has expired. Register for a free account to keep going."
+            )
+
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db)
@@ -216,7 +231,9 @@ async def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is inactive"
         )
-    
+
+    _raise_if_guest_expired(user)
+
     return user
 
 
@@ -361,6 +378,7 @@ async def get_user_or_api_key(
             result = await db.execute(stmt)
             user = result.scalar_one_or_none()
             if user and user.is_active:
+                _raise_if_guest_expired(user)
                 return user
 
     # Not a valid/usable JWT - fall back to API-key lookup

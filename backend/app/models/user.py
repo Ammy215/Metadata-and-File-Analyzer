@@ -30,6 +30,7 @@ class UserRole(enum.Enum):
     USER = "user"
     ADMIN = "admin"
     SUPER_ADMIN = "super_admin"
+    GUEST = "guest"
 
 
 class AuthProvider(enum.Enum):
@@ -66,6 +67,12 @@ class User(Base):
     otp_code = Column(String, nullable=True)
     otp_expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
     otp_attempts = Column(Integer, default=0, nullable=False)
+
+    # Only set for role=GUEST. Checked on every authenticated request (see
+    # utils/auth.py) for an immediate cutoff, and swept up by the periodic
+    # sweep in analysis_tasks.py which hard-deletes the row (and, via the
+    # relationship cascades below, everything the guest uploaded).
+    guest_expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
 
     # Timestamps
     created_at = Column(TIMESTAMP(timezone=True), default=_utcnow)

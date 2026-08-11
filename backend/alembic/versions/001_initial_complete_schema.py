@@ -28,7 +28,7 @@ depends_on = None
 # sa.Enum(SomePyEnum) stores/compares by the member NAME ("USER", "LOCAL"),
 # not its .value ("user", "local"), so the native Postgres enum types below
 # must use the uppercase names to match what the ORM actually sends.
-user_role_enum = sa.Enum('USER', 'ADMIN', 'SUPER_ADMIN', name='userrole')
+user_role_enum = sa.Enum('USER', 'ADMIN', 'SUPER_ADMIN', 'GUEST', name='userrole')
 auth_provider_enum = sa.Enum('LOCAL', 'GOOGLE', 'GITHUB', name='authprovider')
 
 
@@ -56,6 +56,7 @@ def upgrade() -> None:
         Column('otp_code', String(6), nullable=True),
         Column('otp_expires_at', DateTime(timezone=True), nullable=True),
         Column('otp_attempts', Integer(), nullable=False, server_default='0'),
+        Column('guest_expires_at', DateTime(timezone=True), nullable=True),
         Column('created_at', DateTime(timezone=True), nullable=False, default=_utcnow),
         Column('last_login', DateTime(timezone=True), nullable=True),
         Column('last_logout', DateTime(timezone=True), nullable=True),

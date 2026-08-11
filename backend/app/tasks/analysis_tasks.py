@@ -354,6 +354,49 @@ async def sweep_once() -> None:
             f"Sweep: retried {len(stuck_files)} stuck file(s), deleted {deleted_count} stale file(s)"
         )
 
+    await _cleanup_expired_guests()
+
+
+async def _cleanup_expired_guests() -> None:
+    """Hard-delete guest accounts past their guest_expires_at, cascading
+    to their uploaded files/analysis rows via the User model's relationship
+    cascades. Runs every SWEEP_INTERVAL_SECONDS alongside the rest of the
+    sweep - _raise_if_guest_expired() in utils/auth.py already blocks an
+    expired guest from using the app in the meantime, this just physically
+    removes the row afterward."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+    from app.database import async_session_maker
+    from app.models.user import User, UserRole
+
+    now = datetime.now(timezone.utc)
+
+    async with async_session_maker() as session:
+        # uploaded_files is eager-loaded (selectinload) rather than accessed
+        # lazily below - SQLAlchemy's async ORM can't do implicit lazy-load
+        # IO on a plain attribute access, and the delete-orphan cascade on
+        # session.delete() needs the collection already populated too.
+        expired_stmt = select(User).where(
+            User.role == UserRole.GUEST,
+            User.guest_expires_at.is_not(None),
+            User.guest_expires_at <= now,
+        ).options(selectinload(User.uploaded_files))
+        expired_guests = (await session.execute(expired_stmt)).scalars().all()
+
+        for guest in expired_guests:
+            for file_record in guest.uploaded_files:
+                file_path = Path(settings.UPLOAD_DIR) / file_record.stored_name
+                try:
+                    if file_path.exists():
+                        file_path.unlink()
+                except OSError as e:
+                    logger.warning(f"Guest cleanup could not delete {file_path}: {e}")
+            await session.delete(guest)
+
+        if expired_guests:
+            await session.commit()
+            logger.info(f"Sweep: removed {len(expired_guests)} expired guest account(s)")
+
 
 async def start_periodic_sweep() -> None:
     """

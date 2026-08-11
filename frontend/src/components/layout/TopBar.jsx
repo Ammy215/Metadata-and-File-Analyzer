@@ -16,7 +16,7 @@ const ADMIN_ITEMS = [
 const TopBar = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, isGuest } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showAdminMenu, setShowAdminMenu] = useState(false);
 
@@ -170,7 +170,7 @@ const TopBar = () => {
                   {user?.full_name || 'User'}
                 </p>
                 <p className="text-xs text-slate-400">
-                  {isAdmin() ? '🛡️ Admin' : '👤 User'}
+                  {isAdmin() ? '🛡️ Admin' : isGuest() ? '⏱️ Guest' : '👤 User'}
                 </p>
               </div>
               <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
@@ -223,6 +223,17 @@ const TopBar = () => {
           </div>
         </div>
       </div>
+
+      {isGuest() && (
+        <div className="bg-amber-500/10 border-t border-amber-500/20 px-6 py-2">
+          <p className="text-center text-xs text-amber-300">
+            ⏱️ Guest session &middot; 3 uploads max &middot; expires 4 hours after starting &middot;{' '}
+            <Link to="/register" className="underline hover:text-amber-200 transition-colors">
+              Register for a free account
+            </Link>
+          </p>
+        </div>
+      )}
     </motion.div>
   );
 };

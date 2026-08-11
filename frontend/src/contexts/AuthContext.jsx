@@ -131,6 +131,28 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const guestLogin = async () => {
+    try {
+      const response = await axios.post('/api/v1/auth/guest-login');
+      const { access_token } = response.data;
+
+      sessionStorage.setItem('token', access_token);
+      setToken(access_token);
+      axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+
+      const profileResponse = await axios.get('/api/v1/auth/me');
+      setUser(profileResponse.data);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Guest login error:', error);
+      return {
+        success: false,
+        error: getErrorMessage(error, 'Could not start guest session'),
+      };
+    }
+  };
+
   const register = async (email, password, username, fullName) => {
     try {
       await axios.post('/api/v1/auth/register', {
@@ -172,13 +194,19 @@ export const AuthProvider = ({ children }) => {
     return role === 'SUPER ADMIN' || role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'SUPERADMIN';
   };
 
+  const isGuest = () => {
+    return String(user?.role).toUpperCase().trim() === 'GUEST';
+  };
+
   const value = {
     user,
     loading,
     login,
     register,
+    guestLogin,
     logout,
     isAdmin,
+    isGuest,
     isAuthenticated: !!user,
   };
 

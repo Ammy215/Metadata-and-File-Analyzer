@@ -97,6 +97,7 @@ export default function AdminUsers() {
       SUPER_ADMIN: { color: 'bg-red-500/20 text-red-400', icon: '🛡️', label: 'Super Admin' },
       ADMIN: { color: 'bg-blue-500/20 text-blue-400', icon: '👑', label: 'Admin' },
       USER: { color: 'bg-green-500/20 text-green-400', icon: '👤', label: 'User' },
+      GUEST: { color: 'bg-amber-500/20 text-amber-400', icon: '⏱️', label: 'Guest' },
     };
     return badges[role] || badges.USER;
   };

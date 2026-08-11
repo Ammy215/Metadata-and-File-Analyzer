@@ -147,12 +147,17 @@ async def list_all_users(
                 "email": user.email,
                 "username": user.username,
                 "full_name": user.full_name,
-                "role": user.role.value if hasattr(user.role, 'value') else str(user.role),
+                # .name (not .value) - the frontend's role badges/checks
+                # expect 'SUPER_ADMIN'/'ADMIN'/'USER'/'GUEST', which .name
+                # gives directly. .value would send lowercase
+                # ('super_admin'), silently breaking those checks.
+                "role": user.role.name if hasattr(user.role, 'name') else str(user.role),
                 "is_active": user.is_active,
                 "is_verified": user.is_verified,
                 "created_at": user.created_at.isoformat() if user.created_at else None,
                 "last_login": user.last_login.isoformat() if user.last_login else None,
-                "last_logout": user.last_logout.isoformat() if user.last_logout else None
+                "last_logout": user.last_logout.isoformat() if user.last_logout else None,
+                "guest_expires_at": user.guest_expires_at.isoformat() if user.guest_expires_at else None
             }
             for user in users
         ]
