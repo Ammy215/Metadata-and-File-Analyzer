@@ -14,11 +14,13 @@ export default function Login() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [unverified, setUnverified] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setUnverified(false);
     setLoading(true);
 
     const result = await login(formData.email, formData.password);
@@ -28,6 +30,7 @@ export default function Login() {
       navigate('/dashboard');
     } else {
       setError(result.error);
+      setUnverified(Boolean(result.unverified));
       toast.error(result.error);
     }
 
@@ -84,7 +87,17 @@ export default function Login() {
                 className="bg-red-500/10 border border-red-500/50 rounded-lg p-3 flex items-center gap-2"
               >
                 <AlertCircle className="w-5 h-5 text-red-400" />
-                <p className="text-sm text-red-300">{error}</p>
+                <div className="text-sm text-red-300">
+                  <p>{error}</p>
+                  {unverified && (
+                    <Link
+                      to={`/verify-otp?email=${encodeURIComponent(formData.email)}`}
+                      className="underline text-red-200 hover:text-white transition-colors"
+                    >
+                      Verify your email
+                    </Link>
+                  )}
+                </div>
               </motion.div>
             )}
 

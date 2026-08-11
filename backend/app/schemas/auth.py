@@ -36,6 +36,17 @@ class GoogleAuthRequest(BaseModel):
     id_token: str
 
 
+class VerifyOtpRequest(BaseModel):
+    """Schema for verifying an email OTP code."""
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6)
+
+
+class ResendOtpRequest(BaseModel):
+    """Schema for requesting a new email OTP code."""
+    email: EmailStr
+
+
 class TokenResponse(BaseModel):
     """Schema for token response."""
     access_token: str

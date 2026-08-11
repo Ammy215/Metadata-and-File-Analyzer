@@ -5,13 +5,15 @@ from google.oauth2 import id_token
 from google.auth.transport import requests
 from datetime import datetime, timedelta, timezone
 import hashlib
+import secrets
 
 from app.database import get_db
 from app.models.user import User, UserRole, AuthProvider, APIKey
 from app.schemas.auth import (
     UserCreate, UserLogin, UserResponse, TokenResponse,
     GoogleAuthRequest, RefreshTokenRequest, PasswordChange,
-    APIKeyCreate, APIKeyResponse, UserUpdate
+    APIKeyCreate, APIKeyResponse, UserUpdate,
+    VerifyOtpRequest, ResendOtpRequest,
 )
 from app.utils.auth import (
     get_password_hash, verify_password, create_access_token,
@@ -20,7 +22,16 @@ from app.utils.auth import (
     check_rate_limit as check_login_rate_limit, record_login_attempt,
 )
 from app.utils.security import check_rate_limit as check_general_rate_limit
+from app.utils.email import send_otp_email
 from app.config import settings
+
+OTP_EXPIRE_MINUTES = 10
+OTP_MAX_ATTEMPTS = 5
+
+
+def _generate_otp() -> str:
+    """Cryptographically random 6-digit code, zero-padded."""
+    return f"{secrets.randbelow(1_000_000):06d}"
 
 router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
 
@@ -58,6 +69,7 @@ async def register(
     
     # Create new user
     hashed_password = get_password_hash(user_data.password)
+    otp_code = _generate_otp()
     new_user = User(
         email=user_data.email,
         username=user_data.username,
@@ -65,14 +77,18 @@ async def register(
         hashed_password=hashed_password,
         auth_provider=AuthProvider.LOCAL,
         role=UserRole.USER,
-        is_verified=False  # Require email verification in production
+        is_verified=False,
+        otp_code=otp_code,
+        otp_expires_at=datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRE_MINUTES),
         # DO NOT set last_login on registration - only on actual login
     )
-    
+
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
-    
+
+    send_otp_email(new_user.email, otp_code)
+
     # Log audit
     await log_audit(
         db=db,
@@ -84,8 +100,95 @@ async def register(
         user_agent=request.headers.get("User-Agent"),
         details=f"New user registered: {new_user.email}"
     )
-    
+
     return new_user
+
+
+@router.post("/verify-otp")
+async def verify_otp(
+    otp_data: VerifyOtpRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """Confirm a registration OTP code and mark the account verified."""
+    stmt = select(User).where(User.email == otp_data.email)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    # Same generic error for "no such user" and "wrong code" - don't let
+    # this endpoint be used to enumerate which emails are registered.
+    invalid_error = HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Invalid or expired verification code"
+    )
+
+    if not user or not user.otp_code:
+        raise invalid_error
+
+    if user.is_verified:
+        return {"message": "Email already verified"}
+
+    if user.otp_attempts >= OTP_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Too many incorrect attempts. Please request a new code."
+        )
+
+    now = datetime.now(timezone.utc)
+    otp_expires_at = user.otp_expires_at
+    if otp_expires_at and otp_expires_at.tzinfo is None:
+        otp_expires_at = otp_expires_at.replace(tzinfo=timezone.utc)
+
+    if not otp_expires_at or now > otp_expires_at or otp_data.code != user.otp_code:
+        user.otp_attempts += 1
+        await db.commit()
+        raise invalid_error
+
+    user.is_verified = True
+    user.otp_code = None
+    user.otp_expires_at = None
+    user.otp_attempts = 0
+    await db.commit()
+
+    await log_audit(
+        db=db,
+        user_id=str(user.id),
+        action="VERIFY_EMAIL",
+        resource_type="user",
+        resource_id=str(user.id),
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("User-Agent"),
+        details=f"Email verified: {user.email}"
+    )
+
+    return {"message": "Email verified successfully"}
+
+
+@router.post("/resend-otp")
+async def resend_otp(
+    otp_data: ResendOtpRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """Issue a fresh OTP code for a not-yet-verified account."""
+    await check_general_rate_limit(request, max_requests=3, window_seconds=3600)
+
+    stmt = select(User).where(User.email == otp_data.email)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    # Always return the same generic response whether or not the account
+    # exists / is already verified - avoids leaking which emails are
+    # registered to whoever's calling this endpoint.
+    if user and not user.is_verified:
+        otp_code = _generate_otp()
+        user.otp_code = otp_code
+        user.otp_expires_at = datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRE_MINUTES)
+        user.otp_attempts = 0
+        await db.commit()
+        send_otp_email(user.email, otp_code)
+
+    return {"message": "If that account needs verification, a new code has been sent"}
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -132,6 +235,15 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is inactive"
+        )
+
+    # Local accounts must verify their email before logging in. OAuth
+    # accounts (Google/GitHub) never go through registration/OTP at all,
+    # so they're exempt rather than permanently locked out.
+    if user.auth_provider == AuthProvider.LOCAL and not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email before logging in"
         )
 
     record_login_attempt(identifier, success=True)

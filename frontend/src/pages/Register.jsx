@@ -58,9 +58,8 @@ export default function Register() {
     );
 
     if (result.success) {
-      toast.success('Registration successful! Please login to continue.');
-      // Redirect to login page after successful registration
-      navigate('/login');
+      toast.success('Registration successful! Check your email for a verification code.');
+      navigate(`/verify-otp?email=${encodeURIComponent(formData.email)}`);
     } else {
       setError(result.error);
       toast.error(result.error);

@@ -119,9 +119,14 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     } catch (error) {
       console.error('Login error:', error);
+      // Distinguished from a generic auth failure so the UI can offer a
+      // direct link to /verify-otp instead of just "login failed".
+      const unverified = error.response?.status === 403
+        && error.response?.data?.error === 'Please verify your email before logging in';
       return {
         success: false,
         error: getErrorMessage(error, 'Login failed'),
+        unverified,
       };
     }
   };

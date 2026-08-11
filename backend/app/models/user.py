@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, TIMESTAMP, Enum, ForeignKey
+from sqlalchemy import Column, String, Boolean, Integer, TIMESTAMP, Enum, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -59,7 +59,14 @@ class User(Base):
     role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
-    
+
+    # Email OTP verification. otp_attempts caps brute-forcing the 6-digit
+    # code (locked out after 5 wrong tries, forcing a fresh resend) rather
+    # than relying on request rate-limiting alone.
+    otp_code = Column(String, nullable=True)
+    otp_expires_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    otp_attempts = Column(Integer, default=0, nullable=False)
+
     # Timestamps
     created_at = Column(TIMESTAMP(timezone=True), default=_utcnow)
     last_login = Column(TIMESTAMP(timezone=True), nullable=True)

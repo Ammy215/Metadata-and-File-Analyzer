@@ -3,6 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import { useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import VerifyOtp from './pages/VerifyOtp';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminFiles from './pages/AdminFiles';
@@ -86,6 +87,7 @@ function App() {
         {/* Public Routes */}
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+        <Route path="/verify-otp" element={<PublicRoute><VerifyOtp /></PublicRoute>} />
         
         {/* Protected Routes */}
         <Route path="/" element={<ProtectedRoute><Navigate to="/dashboard" replace /></ProtectedRoute>} />

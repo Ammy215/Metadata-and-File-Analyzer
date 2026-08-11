@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     # Google OAuth
     GOOGLE_CLIENT_ID: Optional[str] = "NOT_CONFIGURED_OPTIONAL"
     GOOGLE_CLIENT_SECRET: Optional[str] = "NOT_CONFIGURED_OPTIONAL"
+
+    # Email (Resend) - OTP verification. If unset, OTPs are logged to the
+    # server console instead of emailed, so local dev keeps working without
+    # a real key (same convention as GOOGLE_CLIENT_ID above).
+    RESEND_API_KEY: Optional[str] = "NOT_CONFIGURED_OPTIONAL"
+    RESEND_FROM_EMAIL: str = "onboarding@resend.dev"
     
     # CORS - Parse JSON string from .env or use default list
     CORS_ORIGINS: str = '["http://localhost:3000","http://localhost:5173","http://localhost:8000","http://127.0.0.1:3000","http://127.0.0.1:5173"]'
