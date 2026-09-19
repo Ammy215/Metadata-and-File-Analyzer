@@ -10,6 +10,7 @@ from app.models.file_record import UploadedFile, MetadataEntry, ThreatMatch, Ris
 from app.models.user import User
 from app.utils.auth import get_current_active_user
 from app.utils.report_generator import ReportGenerator
+from app.utils.db_errors import DB_UNAVAILABLE_MESSAGE, is_db_unavailable
 from app.config import settings
 from app.schemas.report import (
     AnalysisResultSchema, MetadataEntrySchema, ThreatMatchSchema,
@@ -91,6 +92,8 @@ async def get_analysis(
     except HTTPException:
         raise
     except Exception as e:
+        if is_db_unavailable(e):
+            raise HTTPException(status_code=503, detail=DB_UNAVAILABLE_MESSAGE)
         raise HTTPException(status_code=500, detail=f"Error fetching analysis: {str(e)}")
 
 
@@ -169,6 +172,8 @@ async def get_report(
     except HTTPException:
         raise
     except Exception as e:
+        if is_db_unavailable(e):
+            raise HTTPException(status_code=503, detail=DB_UNAVAILABLE_MESSAGE)
         raise HTTPException(status_code=500, detail=f"Error fetching report: {str(e)}")
 
 
@@ -225,6 +230,8 @@ async def get_report_pdf(
     try:
         pdf_bytes = await ReportGenerator.export_pdf(report)
     except Exception as e:
+        if is_db_unavailable(e):
+            raise HTTPException(status_code=503, detail=DB_UNAVAILABLE_MESSAGE)
         raise HTTPException(status_code=500, detail=f"Failed to generate PDF report: {str(e)}")
 
     # Sanitize the user-supplied filename before it goes into a response

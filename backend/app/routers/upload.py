@@ -11,6 +11,7 @@ from app.models.user import User, UserRole
 from app.schemas.report import UploadResponse, AnalysisResultSchema, HistoryResponseSchema, HistoryItemSchema
 from app.utils.file_validator import FileValidator
 from app.utils.auth import get_user_or_api_key, log_audit, get_client_ip
+from app.utils.db_errors import DB_UNAVAILABLE_MESSAGE, is_db_unavailable
 from app.tasks.analysis_tasks import run_analysis
 from app.config import settings
 
@@ -142,4 +143,6 @@ async def upload_file(
     except HTTPException:
         raise
     except Exception as e:
+        if is_db_unavailable(e):
+            raise HTTPException(status_code=503, detail=DB_UNAVAILABLE_MESSAGE)
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")

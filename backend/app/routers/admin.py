@@ -9,6 +9,7 @@ from app.models.user import User, UserRole, AuditLog
 from app.models.file_record import UploadedFile
 from app.schemas.auth import UserResponse, UserAdminUpdate, AuditLogResponse
 from app.utils.auth import get_current_admin_user, get_current_super_admin_user, log_audit, get_client_ip
+from app.utils.db_errors import DB_UNAVAILABLE_MESSAGE, is_db_unavailable
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 
@@ -360,6 +361,11 @@ async def list_all_files(
             for f in files
         ]
     except Exception as e:
+        if is_db_unavailable(e):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=DB_UNAVAILABLE_MESSAGE
+            )
         print(f"Error fetching files: {str(e)}")
         import traceback
         traceback.print_exc()

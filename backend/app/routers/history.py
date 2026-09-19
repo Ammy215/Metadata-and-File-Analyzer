@@ -6,6 +6,7 @@ from app.database import get_db
 from app.models.file_record import UploadedFile
 from app.models.user import User
 from app.utils.auth import get_current_active_user
+from app.utils.db_errors import DB_UNAVAILABLE_MESSAGE, is_db_unavailable
 from app.schemas.report import HistoryResponseSchema, HistoryItemSchema
 
 router = APIRouter(prefix="/api/v1", tags=["history"])
@@ -75,6 +76,8 @@ async def get_history(
         )
         
     except Exception as e:
+        if is_db_unavailable(e):
+            raise HTTPException(status_code=503, detail=DB_UNAVAILABLE_MESSAGE)
         raise HTTPException(status_code=500, detail=f"Error fetching history: {str(e)}")
 
 
@@ -113,4 +116,6 @@ async def delete_file(
     except HTTPException:
         raise
     except Exception as e:
+        if is_db_unavailable(e):
+            raise HTTPException(status_code=503, detail=DB_UNAVAILABLE_MESSAGE)
         raise HTTPException(status_code=500, detail=f"Error deleting file: {str(e)}")

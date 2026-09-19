@@ -24,6 +24,7 @@ from app.utils.auth import (
 )
 from app.utils.security import check_rate_limit as check_general_rate_limit
 from app.utils.email import send_otp_email
+from app.utils.db_errors import DB_UNAVAILABLE_MESSAGE, is_db_unavailable
 from app.config import settings
 
 OTP_EXPIRE_MINUTES = 10
@@ -484,6 +485,15 @@ async def refresh_token(
         }
         
     except Exception as e:
+        # Checked before the blanket 401: a database outage here is not the
+        # caller presenting a bad token, and telling them their token is
+        # invalid would send them to re-authenticate over a problem that
+        # has nothing to do with their credentials.
+        if is_db_unavailable(e):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=DB_UNAVAILABLE_MESSAGE
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token"

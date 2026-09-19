@@ -9,6 +9,7 @@ from app.config import settings
 from app.database import init_db, close_db, async_session_maker
 from app.routers import upload, analysis, history, auth, admin
 from app.utils.security import add_security_headers
+from app.utils.db_errors import DB_UNAVAILABLE_ERRORS, DB_UNAVAILABLE_MESSAGE
 from app.tasks.analysis_tasks import start_periodic_sweep
 import logging
 import time
@@ -311,6 +312,32 @@ async def http_exception_handler(request, exc):
         status_code=exc.status_code,
         content={"error": exc.detail},
     )
+
+
+async def database_unavailable_handler(request: Request, exc: Exception):
+    """Turn an unreachable database into an honest 503 rather than a 500.
+
+    A 500 tells the caller "this application is broken"; a 503 tells them
+    "this is a known, temporary condition, come back shortly" - which is
+    what a database outage actually is, especially while the app is running
+    in degraded mode and retrying in the background.
+    """
+    logger.error(
+        f"Database unavailable handling {request.method} {request.url.path}: {exc}"
+    )
+    return JSONResponse(
+        status_code=503,
+        content={"error": DB_UNAVAILABLE_MESSAGE},
+        headers={"Retry-After": "30"},
+    )
+
+
+# Registered per class because Starlette dispatches handlers by walking the
+# raised exception's MRO - there's no predicate-based registration. Routes
+# that catch their own exceptions can't reach these handlers, so they use
+# is_db_unavailable() from the same module instead.
+for _db_exc_type in DB_UNAVAILABLE_ERRORS:
+    app.add_exception_handler(_db_exc_type, database_unavailable_handler)
 
 
 if __name__ == "__main__":
