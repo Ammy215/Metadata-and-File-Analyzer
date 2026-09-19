@@ -21,41 +21,144 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# Startup DB connection: 5 attempts with exponential backoff (1s, 2s, 4s,
+# 8s - ~15s total) before giving up and booting degraded. The cap matters
+# more for the recovery loop below than for startup itself.
+DB_INIT_MAX_ATTEMPTS = 5
+DB_INIT_BACKOFF_CAP_SECONDS = 30
+
+# How often the degraded-mode recovery loop re-tries the database.
+DB_RECOVERY_INTERVAL_SECONDS = 60
+
+# Ceiling on the /health database probe so an unreachable database makes
+# the endpoint answer "Unavailable" quickly instead of hanging on a TCP
+# timeout - a health check that never responds reads as "down" to the
+# platform, which is the outcome this whole module is trying to avoid.
+HEALTH_DB_PROBE_TIMEOUT_SECONDS = 5
+
+# False until init_db() has succeeded - at startup, or later from the
+# recovery loop. Read by /health to report degraded state.
+_db_ready = False
+
+# asyncio only keeps weak references to tasks, so a task with no strong
+# reference anywhere can be garbage-collected mid-flight. Holding them
+# here keeps them alive and gives shutdown something to cancel.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> asyncio.Task:
+    """Start a background task and keep a strong reference to it."""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
+
+
+async def _init_db_with_retry() -> bool:
+    """Try init_db() with exponential backoff. Returns True on success.
+
+    Never raises: the caller decides what an unreachable database means,
+    and for this app the answer is "boot anyway", not "exit".
+    """
+    delay = 1
+    for attempt in range(1, DB_INIT_MAX_ATTEMPTS + 1):
+        try:
+            await init_db()
+            return True
+        except Exception as e:
+            if attempt == DB_INIT_MAX_ATTEMPTS:
+                logger.error(
+                    f"✗ Database unreachable after {DB_INIT_MAX_ATTEMPTS} attempts: {e}"
+                )
+                return False
+            logger.warning(
+                f"Database init attempt {attempt}/{DB_INIT_MAX_ATTEMPTS} failed "
+                f"({e}) - retrying in {delay}s"
+            )
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, DB_INIT_BACKOFF_CAP_SECONDS)
+    return False
+
+
+async def _db_recovery_loop() -> None:
+    """Keep retrying the database until it comes back, then leave degraded
+    mode and start the sweep.
+
+    This is what makes a database outage self-healing. Previously an
+    unreachable database at boot raised out of the lifespan, which exits
+    the process - and since the next boot hit the same unreachable
+    database, the service stayed dead until a human redeployed it.
+    """
+    global _db_ready
+    while not _db_ready:
+        await asyncio.sleep(DB_RECOVERY_INTERVAL_SECONDS)
+        try:
+            await init_db()
+        except Exception as e:
+            logger.warning(f"Database still unreachable, staying degraded: {e}")
+            continue
+
+        _db_ready = True
+        logger.info("="*60)
+        logger.info("✓ Database reachable again - leaving degraded mode")
+        logger.info("="*60)
+        _spawn(start_periodic_sweep())
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize database on startup, close it on shutdown - replaces the
     deprecated @app.on_event startup/shutdown hooks with FastAPI's current
-    lifespan context-manager pattern."""
-    try:
-        await init_db()
+    lifespan context-manager pattern.
+
+    A database that isn't reachable at boot is explicitly NOT fatal here.
+    Serving HTTP in degraded mode keeps /health answering (so the platform
+    doesn't kill the container) and lets the recovery loop restore full
+    service on its own once the database returns.
+    """
+    global _db_ready
+
+    _db_ready = await _init_db_with_retry()
+
+    logger.info("="*60)
+    logger.info("🛡️  FileShield Intelligence Platform v2.0.0")
+    logger.info("="*60)
+
+    if _db_ready:
         # Background analysis runs as FastAPI BackgroundTasks (no separate
         # worker/broker - see analysis_tasks.py's start_periodic_sweep
         # docstring for why). This task is the periodic stuck-file retry +
         # stale-file cleanup sweep; cancelled on shutdown below.
-        sweep_task = asyncio.create_task(start_periodic_sweep())
-        logger.info("="*60)
-        logger.info("🛡️  FileShield Intelligence Platform v2.0.0")
-        logger.info("="*60)
+        _spawn(start_periodic_sweep())
         logger.info("✓ Database initialized")
-        logger.info("✓ Security middleware active")
-        logger.info("✓ Rate limiting enabled")
-        logger.info("✓ SQL injection protection active")
-        logger.info("✓ XSS protection active")
-        logger.info("✓ CORS configured")
-        logger.info("✓ Audit logging enabled")
         logger.info("✓ Background analysis sweep started")
-        logger.info(f"✓ API Documentation: http://localhost:8000/docs")
-        logger.info(f"✓ Alternative Docs: http://localhost:8000/redoc")
-        logger.info("="*60)
-        logger.info("🚀 System ready for enterprise operations")
-        logger.info("="*60)
-    except Exception as e:
-        logger.error(f"✗ Error initializing system: {e}")
-        raise
+    else:
+        _spawn(_db_recovery_loop())
+        logger.warning("⚠ DEGRADED MODE - database unreachable")
+        logger.warning("⚠ Serving HTTP; database-backed endpoints will fail")
+        logger.warning(
+            f"⚠ Retrying every {DB_RECOVERY_INTERVAL_SECONDS}s - no redeploy needed"
+        )
+
+    logger.info("✓ Security middleware active")
+    logger.info("✓ Rate limiting enabled")
+    logger.info("✓ SQL injection protection active")
+    logger.info("✓ XSS protection active")
+    logger.info("✓ CORS configured")
+    logger.info("✓ Audit logging enabled")
+    logger.info(f"✓ API Documentation: http://localhost:8000/docs")
+    logger.info(f"✓ Alternative Docs: http://localhost:8000/redoc")
+    logger.info("="*60)
+    logger.info(
+        "🚀 System ready for enterprise operations" if _db_ready
+        else "🟡 System up in degraded mode - waiting on database"
+    )
+    logger.info("="*60)
 
     yield
 
-    sweep_task.cancel()
+    for task in list(_background_tasks):
+        task.cancel()
     try:
         await close_db()
         logger.info("✓ Database connection closed")
@@ -118,26 +221,44 @@ app.include_router(history.router)  # History routes
 
 
 # Health check endpoint
+async def _probe_database() -> None:
+    """One lightweight round-trip to confirm the database answers."""
+    async with async_session_maker() as session:
+        await session.execute(text("SELECT 1"))
+
+
 @app.get("/health")
 async def health_check():
-    """Comprehensive health check endpoint.
+    """Health check endpoint. Always returns HTTP 200, deliberately.
 
-    Runs a real SELECT 1 against the database rather than hardcoding
-    "Connected" - besides making the field honest, this doubles as the
-    natural way an uptime pinger keeps a scale-to-zero Postgres provider
-    (e.g. Neon) warm: a request that never touches the DB doesn't reset
-    its idle timer, only a real query does.
+    Degraded state is reported in the body, never via the status code.
+    Render (like most platforms) treats a non-2xx health check as "replace
+    this container", so returning 503 while the database is down would
+    destroy the service during precisely the outage degraded mode exists
+    to survive. Do not "fix" this to return 503.
+
+    The SELECT 1 is a real probe rather than a hardcoded "Connected", so
+    the reported value is honest. That also means this endpoint hits the
+    database on every call: do NOT aim a frequent uptime pinger at it on a
+    metered or scale-to-zero provider. Doing exactly that kept the compute
+    permanently awake and burned a full month's allowance in ~17 days.
+    Point uptime pingers at / instead, which touches nothing.
     """
     try:
-        async with async_session_maker() as session:
-            await session.execute(text("SELECT 1"))
+        await asyncio.wait_for(
+            _probe_database(), timeout=HEALTH_DB_PROBE_TIMEOUT_SECONDS
+        )
         db_status = "Connected"
     except Exception as e:
         logger.error(f"Health check DB probe failed: {e}")
         db_status = "Unavailable"
 
+    # _db_ready covers the case where the database answers but schema init
+    # hasn't succeeded yet - reachable is not the same as ready.
+    degraded = db_status != "Connected" or not _db_ready
+
     return {
-        "status": "healthy",
+        "status": "degraded" if degraded else "healthy",
         "version": "2.0.0",
         "security": {
             "authentication": "JWT + OAuth2",

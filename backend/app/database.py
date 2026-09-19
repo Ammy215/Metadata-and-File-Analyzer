@@ -21,9 +21,17 @@ if _is_sqlite:
         cursor.execute("PRAGMA busy_timeout=15000")
         cursor.close()
 else:
+    # Sized for a low-traffic app, not for throughput. The previous
+    # 20/40 pool held up to 60 connections open indefinitely (no
+    # pool_recycle), which is what kept a scale-to-zero Postgres
+    # provider permanently awake: the compute can only suspend once
+    # nothing is connected, so an idle-but-open pool billed 24/7 and
+    # burned the entire monthly compute allowance in ~17 days.
+    # pool_recycle closes connections that have been idle past the
+    # timeout so the database is actually allowed to go to sleep.
     engine = create_async_engine(
         settings.DATABASE_URL, echo=False, pool_pre_ping=True,
-        pool_size=20, max_overflow=40,
+        pool_size=5, max_overflow=10, pool_recycle=300,
     )
 
 # Create async session factory

@@ -29,7 +29,16 @@ STUCK_RETRY_MAX_AGE = timedelta(hours=6)
 DELETE_MIN_AGE = timedelta(hours=48)
 DELETE_MAX_AGE = timedelta(days=30)
 
-SWEEP_INTERVAL_SECONDS = 15 * 60
+# Every 4 hours, not every 15 minutes. This loop runs for the entire life
+# of the process, so on a host that never sleeps it was waking the database
+# around the clock purely to ask "is there anything to do?" - almost always
+# no. The cost of the longer interval is bounded and acceptable: a stuck
+# file waits up to 4h for its retry instead of 15min (it was already
+# waiting a 30min minimum before being considered stuck), and an expired
+# guest's row survives up to 4h past expiry before being physically
+# deleted - harmless, because _raise_if_guest_expired() in utils/auth.py
+# already blocks that guest from doing anything the moment they expire.
+SWEEP_INTERVAL_SECONDS = 4 * 60 * 60
 
 
 async def run_analysis(file_id: str, file_path: str) -> None:
